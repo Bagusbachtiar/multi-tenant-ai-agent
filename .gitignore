@@ -1,0 +1,20 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+# Env — contains secrets, never commit
+.env
+
+# Alembic
+alembic/versions/*.pyc
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
