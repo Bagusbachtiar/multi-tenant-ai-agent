@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     n8n_webhook_secret: str = ""
     admin_secret_key: str = "change-me-admin"
 
+    whatsapp_phone_id: str = ""
+    whatsapp_access_token: str = ""
+    whatsapp_verify_token: str = "123456"
+    whatsapp_tenant_api_key: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
