@@ -11,3 +11,8 @@ class DocumentResponse(BaseModel):
     filename: str
     chunk_count: int
     created_at: datetime
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentResponse]
+    total: int
