@@ -5,22 +5,23 @@ A production-ready multi-tenant RAG (Retrieval-Augmented Generation) service bui
 ## Architecture
 
 ```
-WhatsApp User
-     |
-     v
-Meta Graph API
-     |
-     v
-FastAPI (Python)
-  ├── Auth: X-Api-Key header → tenant lookup
-  ├── RAG Pipeline:
-  │     upload → chunk → embed → pgvector
-  │     query  → embed → cosine search → LLM → answer
-  ├── Tenant Isolation: Postgres RLS (row-level security)
-  └── WhatsApp Webhook: verify + receive + reply
-     |
-     v
-Postgres + pgvector    Redis (rate limiting)    Ollama (LLM + embeddings)
+ WhatsApp User
+       │
+       ▼
+ Meta Graph API
+       │
+       ▼
+ FastAPI (Python)
+ ├── Auth ──────── X-Api-Key header → tenant lookup
+ ├── RAG ───────── upload → chunk → embed → store
+ │                 query  → embed → search → LLM → answer
+ ├── Isolation ─── Postgres Row-Level Security (per tenant)
+ └── WhatsApp ──── webhook verify · receive · reply
+       │
+       ├──────────────────┬──────────────────┐
+       ▼                  ▼                  ▼
+ Postgres + pgvector   Redis             Ollama
+ (vector store, RLS)   (rate limiting)   (LLM + embeddings)
 ```
 
 ## Stack
