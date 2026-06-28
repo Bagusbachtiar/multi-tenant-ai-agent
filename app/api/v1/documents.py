@@ -1,7 +1,9 @@
+import io
 import re
 import uuid
 from typing import Annotated
 
+import pdfplumber
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from sqlalchemy import func, select
@@ -22,14 +24,31 @@ _SECTION_PATTERN = re.compile(r"(?=^===\s+)", re.MULTILINE)
 
 
 def _split_text(text: str) -> list[str]:
-    # If doc has === section headers, split on them — keeps each section intact
     if "===" in text:
         raw = _SECTION_PATTERN.split(text)
         chunks = [s.strip() for s in raw if s.strip()]
         if len(chunks) > 1:
             return chunks
-    # Fallback: recursive character split
     return _splitter.split_text(text)
+
+
+def _extract_pdf(data: bytes) -> str:
+    parts: list[str] = []
+    with pdfplumber.open(io.BytesIO(data)) as pdf:
+        for page in pdf.pages:
+            # Extract tables first — convert to markdown-style text
+            for table in page.extract_tables():
+                rows = []
+                for row in table:
+                    cells = [c.strip() if c else "" for c in row]
+                    rows.append(" | ".join(cells))
+                if rows:
+                    parts.append("\n".join(rows))
+            # Extract remaining text (excludes table bounding boxes)
+            text = page.extract_text(x_tolerance=2, y_tolerance=2)
+            if text:
+                parts.append(text)
+    return "\n\n".join(parts)
 
 
 @router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
@@ -39,13 +58,24 @@ async def upload_document(
     db: Annotated[AsyncSession, Depends(get_tenant_db)],
 ) -> DocumentResponse:
     raw = await file.read()
-    try:
-        text = raw.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="File must be UTF-8 encoded text",
-        )
+    filename = file.filename or "untitled"
+
+    if filename.lower().endswith(".pdf"):
+        try:
+            text = _extract_pdf(raw)
+        except Exception:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to parse PDF",
+            )
+    else:
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be UTF-8 encoded text",
+            )
 
     texts = _split_text(text)
     if not texts:
@@ -56,7 +86,7 @@ async def upload_document(
 
     vectors = await embed_texts(texts)
 
-    doc = Document(tenant_id=tenant.id, filename=file.filename or "untitled")
+    doc = Document(tenant_id=tenant.id, filename=filename)
     db.add(doc)
     await db.flush()
 
